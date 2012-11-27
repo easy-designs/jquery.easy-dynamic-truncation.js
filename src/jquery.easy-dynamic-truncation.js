@@ -25,6 +25,16 @@
  * 		     than 768px and a "show More" link will be dynamically added -->
  * 	</section>
  * 
+ * If you want to truncate without giving a user control over expanding, you 
+ * can do that by adding data-truncate-no-more, but we recommend only using 
+ * this in a mobile context in conjunction with data-truncate-auto-display:
+ * 
+ * 	<section data-truncate-char-limit="200" data-truncate-no-more
+ * 			 data-truncate-auto-display="768">
+ * 		<!-- On screens narrower than 768px only 200 characters will 
+ * 			 be displayed and no "More" link will appear -->
+ * 	</section>
+ * 
  * If you want to allow the user to re-collapse the interface, use the 
  * data-truncate-collapsible attribute:
  * 
@@ -47,21 +57,39 @@
 ;(function( $, window, document, UNDEFINED ){
 	
 	var FALSE = false,
+		NULL = null,
+		MORE = 'More',
+		ALL = 'All',
+		HIDE = 'hide',
+		SHOW = 'reveal',
+		DOT = '.',
+		SPACE = ' ',
+		A = 'a',
+		DATA_ATTR = '[data-',
+		CLOSE_SQUARE = ']',
+		NOT = ':not(',
+		CLOSE_PAREN = ')',
 		tap_evt = 'click',
 		PREFIX = 'truncate',
 		REVEAL = PREFIX + '-reveal',
 		HIDE = PREFIX + '-hide',
 		COLLAPSED = PREFIX + '-collapsed',
 		MAX_ITEMS = PREFIX + '-max-items',
-		MAX_ITEMS_SELECTOR = '[data-' + MAX_ITEMS + ']',
+		MAX_ITEMS_SELECTOR = DATA_ATTR + MAX_ITEMS + CLOSE_SQUARE,
 		CHAR_LIMIT = PREFIX + '-char-limit',
 		AUTO_DISPLAY = PREFIX + '-auto-display',
 		EXCLUDE = PREFIX + '-exclude',
+		EXCLUDE_SELECTOR = DOT + EXCLUDE,
+		MORE_LINK = 'more-link',
+		MORE_SELECTOR = DOT + MORE_LINK,
 		$truncate = $( MAX_ITEMS_SELECTOR ),
-		$reveal = $('<div class="more-link"><a class="' + REVEAL + '" href="#show-more">More</a></div>'),
+		$reveal = $('<div class="' + MORE_LINK + '"><a class="' + REVEAL + '" href="#show-more">More</a></div>'),
 		string_start = '<b class="' + PREFIX + '-string">',
 		string_end = '</b>',
-		$ellipsis = $('<i class="' + PREFIX + '-ellipsis">\u2026</i>');
+		$ellipsis = $('<i class="' + PREFIX + '-ellipsis">\u2026</i>'),
+		ELLIPSIS_SELECTOR = DOT + PREFIX + '-ellipsis',
+		$win = $(window),
+		size = 0;
 	
 	if ( 'ontouchstart' in window ||
 		 'createTouch' in document )
@@ -69,6 +97,41 @@
 		tap_evt = 'touchend';
 	}
 	
+	
+	// resize watcher
+	function watchResize(callback)
+	{
+		var resizing;
+		callback.size = size;
+		function done()
+		{
+			var curr_size = $win.width();
+			clearTimeout( resizing );
+			resizing = NULL;
+			// only run on a true resize
+			if ( callback.size != curr_size )
+			{
+				callback();
+				callback.size = curr_size;
+			}
+		}
+		$win.resize(function(){
+			if ( resizing )
+			{
+				clearTimeout( resizing );
+				resizing = NULL;
+			}
+			resizing = setTimeout( done, 50 );
+		});
+		// init
+		callback();
+	};
+	watchResize(function(){
+		size = $win.width();
+	});
+	
+
+	// loop
 	$truncate.each(function(){
 		
 		var $this = $(this),
@@ -76,29 +139,27 @@
 			exclude = $this.data( EXCLUDE ),
 			auto_display = $this.data( AUTO_DISPLAY ),
 			// should user be able to re-collapse?
-			collapsible = $this.is( '[data-' + PREFIX + '-collapsible]' ),
+			collapsible = $this.is( DATA_ATTR + PREFIX + '-collapsible]' ),
+			// should we display "more"?
+			no_more = $this.is( DATA_ATTR + PREFIX + '-no-more]' ),
 			// character limit?
 			char_limit = FALSE,
 			char_total = 0,
 			$string = $([]),
 			// does more exist already?
-			embed = $this.is( '[data-' + PREFIX + '-embed]' ),
+			embed = $this.is( DATA_ATTR + PREFIX + '-embed]' ),
 			// does more exist already?
-			$more_link = $this.siblings('.more-link'),
+			$more_link = $this.siblings( MORE_SELECTOR ),
 			has_link = ( $more_link.length > 0 ),
 			$link,
 			// find the kids
-			$children = ( exclude != UNDEFINED ? $this.children( ':not(' + exclude + ')' ) : $this.children() )
+			$children = ( exclude != UNDEFINED ? $this.children( NOT + exclude + CLOSE_PAREN ) : $this.children() )
 							// remove any "more" links
-							.filter(':not(.more-link)');
+							.filter( NOT + MORE_SELECTOR + CLOSE_PAREN );
 							
-		if ( auto_display != UNDEFINED )
-		{
-			auto_display = $(window).width() >= auto_display;
-		}
 		
 		// Character limit
-		if ( $this.is( '[data-' + CHAR_LIMIT + ']' ) )
+		if ( $this.is( DATA_ATTR + CHAR_LIMIT + CLOSE_SQUARE ) )
 		{
 			char_limit = parseInt( $this.data( CHAR_LIMIT ), 10 );
 			
@@ -109,7 +170,7 @@
 				var $child = $(this),
 					text = $child.text(),
 					html = $child.html(),
-					words = text.split(' '),
+					words = text.split( SPACE ),
 					length = text.length;
 				
 				// we’ll exclude up until we bust
@@ -127,7 +188,7 @@
 						if ( char_total + word_length > char_limit )
 						{
 							// get the previous words
-							search = words[i-2] + ' ' + words[i-1] + ' ';
+							search = words[i-2] + SPACE + words[i-1] + SPACE;
 							
 							// wrap the arbitrary text
 							$child.html(
@@ -150,8 +211,8 @@
 				char_total += length;
 			});
 			
-			$children = $children.filter( ':not(.' + EXCLUDE + ')' );
-			$string = $('.' + PREFIX + '-string');
+			$children = $children.filter( NOT + EXCLUDE_SELECTOR + CLOSE_PAREN );
+			$string = $this.find( DOT + PREFIX + '-string' );
 		}
 		
 		// manual Skip
@@ -160,133 +221,79 @@
 			$children = $children.eq( skip - 1 ).nextAll();
 		}
 		
-		
+
+		// reveals the content
 		function reveal( $link )
 		{
-			var $parent = $link.parent();
-
-			// reveal the kids
+			if ( $this.state == SHOW )
+			{
+				return;
+			}
+			
 			$children
 				.add( $string )
 				.removeClass( COLLAPSED );
 			
-			// swap the class
-			$link
-				.removeClass( REVEAL );
-			
-			// collapsible?
-			if ( collapsible )
+			// no link, just remove the ellipses
+			if ( no_more )
 			{
-				$link.text( 'Less' )
-					.addClass( HIDE );
-				
-				// relocate to the last child?
-				if ( embed )
+				var $first = $children.eq(0).prev();
+				if ( $first.length < 1 )
 				{
-					$children.last()
-						.append( $more_link );
-					
-					$more_link.find( '.' + PREFIX + '-ellipsis' )
-						.remove();
+					$first = $string.closest( EXCLUDE_SELECTOR );
 				}
+				$first.find( ELLIPSIS_SELECTOR )
+					.remove();
 			}
-			
-			// it’s been fun but you work here is done
-			else if ( ! has_link )
-			{
-				if ( $parent.is('.more-link') )
-				{
-					$parent.remove();
-				}
-				else
-				{
-					$link.remove();
-				}
-			}
-			
-			// Existing link
+			// toggle the link
 			else
 			{
-				// swap out "More" for "All"
-				$link.html( $link.html().replace( 'More', 'All' ) );
-				
-				$more_link.off( tap_evt, 'a', toggle );
-			}
-		 }
-	
-		function hide( $link )
-		{
-			// find the element that gets the "more" link
-			var $first = $children.eq(0).prev();
-			if ( $first.length < 1 )
-			{
-				$first = $string.closest( '.' + EXCLUDE + ')' );
+				toggleLink( $link, SHOW );
 			}
 			
-			// no matching kids or set to auto_display, don’t bother
-			if ( ! auto_display &&
-				 $children.length )
-			{
-				// hide initially
-				$children
-					.add( $string )
-					.addClass( COLLAPSED );
-				
-				// existing link
-				if ( $link != UNDEFINED )
-				{
-					$link.text( 'More' )
-					// swap the class
-						.addClass( REVEAL )
-						.removeClass( HIDE );
-						
-					// relocate to the previous child?
-					if ( embed )
-					{
-						$first.append(
-							$more_link
-								.prepend( $ellipsis.clone() )
-						);
-					}
-				}
-				
-				// non-existant link (first run?)
-				else if ( ! has_link )
-				{
-					$more_link = $reveal.clone();
-
-					// embed it in the previous child?
-					if ( embed )
-					{
-						$more_link = $more_link.find('a')
-										.wrap('<span class="more-link"/>')
-										.parent()
-											.prepend( $ellipsis.clone() );
-						$first.append( $more_link );
-					}
-					else
-					{
-						$this.closest(':not(ol,ul,dl)')
-							.append( $more_link );
-					}
-				}
-				else
-				{
-					$link = $more_link.find('a')
-								.addClass( REVEAL );
-
-					// swap out "All" for "More"
-					$link.html( $link.html().replace( 'All', 'More' ) );
-				}
-
-			}
+			$this.state = SHOW;
 		}
 		
+
+		// hides the content
+		function hide( $link )
+		{
+			if ( $this.state == HIDE )
+			{
+				return;
+			}
+			
+			$children
+				.add( $string )
+				.addClass( COLLAPSED );
+			
+			// no link, just add the ellipses
+			if ( no_more )
+			{
+				// find the element that gets the ellipses
+				var $first = $children.eq(0).prev();
+				if ( $first.length < 1 )
+				{
+					$first = $string.closest( EXCLUDE_SELECTOR );
+				}
+				$first.append( $ellipsis.clone() );
+			}
+			// toggle the link
+			else
+			{
+				toggleLink( $link, HIDE );
+			}
+
+			$this.state = HIDE;
+		}
+		
+		
+		// toggles the state of things based on the link
 		function toggle( e )
 		{
 			var $link = $(this);
 
-			if ( $link.is( '.' + REVEAL ) )
+			if ( $link.is( DOT + REVEAL ) )
 			{
 				reveal( $link );
 			}
@@ -298,10 +305,148 @@
 			e.preventDefault();
 		}
 		
-		hide();
+		
+		// Handles the More/Less link
+		function toggleLink( $link, state )
+		{
+			state = state || HIDE;
+			
+			var $first = $children.eq(0).prev(),
+				$parent;
+			
+			// Hiding
+			if ( state == HIDE )
+			{
+				// find the element that gets the "more" link
+				if ( $first.length < 1 )
+				{
+					$first = $string.closest( EXCLUDE_SELECTOR );
+				}
 
-		// set up the reveal
-		$more_link.on( tap_evt, 'a', toggle );
+				// no matching kids or set to auto_display, don’t bother
+				if ( ! auto_display &&
+					 $children.length )
+				{
+					// existing link
+					if ( $link != UNDEFINED )
+					{
+						$link.text( MORE )
+						// swap the class
+							.addClass( REVEAL )
+							.removeClass( HIDE );
+
+						// relocate to the previous child?
+						if ( embed )
+						{
+							$first.append(
+								$more_link
+									.prepend( $ellipsis.clone() )
+							);
+						}
+					}
+
+					// non-existant link (first run?)
+					else if ( ! has_link )
+					{
+						$more_link = $reveal.clone();
+
+						// embed it in the previous child?
+						if ( embed )
+						{
+							$more_link = $more_link.find('a')
+											.wrap('<span class="' + MORE_LINK + '"/>')
+											.parent()
+												.prepend( $ellipsis.clone() );
+							$first.append( $more_link );
+						}
+						else
+						{
+							$this.closest(':not(ol,ul,dl)')
+								.append( $more_link );
+						}
+					}
+					else
+					{
+						$link = $more_link.find('a')
+									.addClass( REVEAL );
+
+						// swap out "All" for "More"
+						$link.html( $link.html().replace( ALL, MORE ) );
+					}
+					
+					// set up the reveal
+					$more_link.on( tap_evt, A, toggle );
+				}
+			}
+			
+			// Showing
+			else if ( state == SHOW &&
+			  		  $link )
+			{
+				// swap the class
+				$link.removeClass( REVEAL );
+
+				// collapsible?
+				if ( collapsible )
+				{
+					$link.text( 'Less' )
+						.addClass( HIDE );
+
+					// relocate to the last child?
+					if ( embed )
+					{
+						$children.last()
+							.append( $more_link );
+
+						$more_link.find( ELLIPSIS_SELECTOR )
+							.remove();
+					}
+				}
+
+				// it’s been fun but you work here is done
+				else if ( ! has_link )
+				{
+					$parent = $link.parent();
+					if ( $parent.is( MORE_SELECTOR ) )
+					{
+						$parent.remove();
+					}
+					else
+					{
+						$link.remove();
+					}
+				}
+
+				// Existing link
+				else
+				{
+					// swap out "More" for "All"
+					$link.html( $link.html().replace( MORE, ALL ) );
+
+					$more_link.off( tap_evt, A, toggle );
+				}
+			}
+		}
+		
+		
+		// initialize
+		watchResize(function(){
+
+			var threshold = auto_display;
+			
+			// threshold met?
+			if ( threshold != UNDEFINED )
+			{
+				threshold = size >= threshold;
+				
+				( threshold ? reveal : hide )();
+			}
+			else
+			{
+				hide();
+			}
+			
+		});
 		
 	});
 	

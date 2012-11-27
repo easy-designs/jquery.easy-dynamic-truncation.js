@@ -27,6 +27,14 @@ If you want the children to be automatically shown when screens are over a certa
 		     than 768px and a "Show More" link will be dynamically added -->
 	</section>
 
+If you want to truncate without giving a user control over expanding, you can do that by adding `data-truncate-no-more`, but we recommend only using this in a mobile context in conjunction with `data-truncate-auto-display`:
+
+	<section data-truncate-char-limit="200" data-truncate-no-more
+			 data-truncate-auto-display="768">
+		<!-- On screens narrower than 768px only 200 characters will 
+			 be displayed and no "More" link will appear -->
+	</section>
+
 If you want to allow the user to re-collapse the interface, use the `data-truncate-collapsible` attribute:
 
 	<section data-truncate-max-items="2" data-truncate-collapsible>
